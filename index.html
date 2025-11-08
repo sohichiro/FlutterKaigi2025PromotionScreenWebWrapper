@@ -177,7 +177,7 @@
     function tickClock(){
       const d = new Date();
         // 24h表示、日本ロケール
-        clockEl.textContent = d.toLocaleTimeString('ja-JP', {hour12:false, hour: '2-digit', minute: '2-digit'});
+        clockEl.textContent = d.toLocaleTimeString('ja-JP', {hour12: false, hour: '2-digit', minute: '2-digit'});
     }
     tickClock();
     setInterval(tickClock, 1000);
