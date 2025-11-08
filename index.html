@@ -208,12 +208,6 @@
         return;
       }
 
-<!--      items = Array.isArray(json.items) ? json.items : [];
-      if (!items.length) {
-        status('画像が見つかりません（フォルダ/権限を確認）');
-        return;
-      }
-      status(`画像 ${items.length} 枚 / 更新 ${new Date(json.now).toLocaleString()}`);-->
         // 旧URLなら img64 に差し替え（既に入れてる場合はそのままでOK）
         items = (json.items || []).map(it => {
         const u = new URL(it.url, location.href);
