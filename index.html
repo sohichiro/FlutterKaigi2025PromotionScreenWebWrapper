@@ -85,6 +85,13 @@
     let items = []; // {url, updatedAt, ...}
     let timer = null;
     let running = true;
+    
+    // ★ 追加: ループ管理
+    let loopHandle = null;
+    let inFlight = false;   // 遷移の同時実行防止
+    let lastSwapAt = 0;     // 最後に画像が画面に出た時刻（ms）
+
+    function status(msg) { statusEl.textContent = msg; }
 
     async function fetchList() {
     status('読み込み中…');
@@ -192,6 +199,8 @@ async function preload(url) {
   }
 
   async function showNext() {
+    if (inFlight) return;       // ★ 二重起動ガード
+    inFlight = true;
     try {
       const it = pickNextWeighted();
       if (!it) { status('候補がありません'); return; }
@@ -206,12 +215,37 @@ async function preload(url) {
       nextLayer.classList.add('show');
       currentLayer.classList.remove('show');
       [currentLayer, nextLayer] = [nextLayer, currentLayer];
+      // この瞬間から表示時間カウント開始
+      lastSwapAt = Date.now();
       status('');
     } catch (e) {
       console.error('showNext error', e);
       status(`読み込みエラー: ${String(e).slice(0,300)}`);
     }
   }
+  
+  // ★ 追加: 次の遷移を予約（setIntervalをやめる）
+  function scheduleNext(afterMs) {
+    if (loopHandle) clearTimeout(loopHandle);
+    loopHandle = setTimeout(async () => {
+        if (!running) {
+        // 一時停止中は短い間隔で再チェック
+        scheduleNext(500);
+        return;
+        }
+
+        // まだ最低表示時間に満たない場合は延長
+        const elapsed = Date.now() - lastSwapAt;
+        if (elapsed < SLIDE_MS) {
+            scheduleNext(SLIDE_MS - elapsed);
+            return;
+        }
+
+        await showNext();
+        // 次回も「画面に出してから」SLIDE_MS後
+        scheduleNext(SLIDE_MS);
+    }, Math.max(0, afterMs));
+　}
 
     function startLoop() {
       if (timer) clearInterval(timer);
@@ -238,7 +272,8 @@ async function preload(url) {
       // 最初の1枚をすぐ表示
       await showNext();
       currentLayer.classList.add('show');
-      startLoop();
+      //startLoop();
+      scheduleNext(SLIDE_MS);
 
       // 5分おきに最新リストを再取得（新規ファイル追加を拾う）
       setInterval(fetchList, 5 * 60 * 1000);
