@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>Signage</title>
+<title>Drive Signage</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
@@ -26,56 +26,64 @@
 <div id="diag">boot…</div>
 
 <script>
-// ===== 設定 =====
-const GAS_BASE = 'https://script.google.com/macros/s/AKfycbxF5les5Hlm6qzo6Iixur72lkLtsshsqXXETkRdY9nIIm2hYTxYlMnfnOMdzEaAf4mV/exec'; // ←あなたのexecに置換
-const REFRESH_SEC = 30;
-const DURATION_MS = 5000;
-const TRANSITION_MS = 600;
+// ======= 設定（必ずあなたの /exec に置き換え） =======
+const GAS_BASE = 'https://script.google.com/macros/s/AKfycbxF5les5Hlm6qzo6Iixur72lkLtsshsqXXETkRdY9nIIm2hYTxYlMnfnOMdzEaAf4mV/exec';
+const REFRESH_SEC = 30;   // 何秒ごとに一覧を取り直すか
+const DURATION_MS = 5000; // 1枚の表示時間
+const TRANSITION_MS = 600;// フェード時間
 
-// ===== 状態・参照 =====
+// ======= 参照・状態 =======
 const imgA = document.getElementById('a');
 const imgB = document.getElementById('b');
 const cap  = document.getElementById('cap');
 const diag = document.getElementById('diag');
 let list = [], idx = -1, showingA = true, timer = null;
 
-// ===== JSONP: list の受け口 =====
-function __receiveList(payload){
-  try{
-    if (!payload || payload.ok !== true || !Array.isArray(payload.items)) {
-      diag.textContent = 'list payload NG';
-      return;
-    }
-    list = payload.items;
-    diag.textContent = 'list ' + list.length;
-    if (!list.length) return;
-    if (idx < 0) { idx = -1; next(); scheduleNext(DURATION_MS); }
-  }catch(e){
-    diag.textContent = 'list err ' + e.message;
-  }
-}
-
-// JSONP 呼び出し
-function fetchList(){
-  const cb = '__receiveList';
-  const s = document.createElement('script');
-  s.src = `${GAS_BASE}?api=list&callback=${cb}&_=${Date.now()}`;
-  s.async = true;
-  s.onerror = () => { diag.textContent = 'list http err'; };
-  // 既存のタグは都度捨てる
-  const prev = document.getElementById('jsonp_list');
-  if (prev) prev.remove();
-  s.id = 'jsonp_list';
-  document.body.appendChild(s);
-}
-
-// 画像URL（<img src> 直参照）
+// ======= 画像URL（直リンク：CORS不要） =======
 function toSrc(item){
   return `${GAS_BASE}?id=${encodeURIComponent(item.id)}&t=${item.updated}`;
 }
 
-// 表示
-function setImage(backEl, item, frontEl){
+// ======= JSONPの代わりに postMessage で一覧取得（CORS回避で安定） =======
+function fetchList(){
+  // 古いiframeを掃除
+  const old = document.getElementById('list_iframe');
+  if (old) old.remove();
+
+  const ifr = document.createElement('iframe');
+  ifr.id = 'list_iframe';
+  ifr.style.display = 'none';
+  // GAS 側 doGet に api=embed&view=list を実装済み想定（親に postMessage で返す）
+  ifr.src = `${GAS_BASE}?api=embed&view=list&_=${Date.now()}`;
+  ifr.onerror = () => { diag.textContent = 'list iframe err'; };
+  document.body.appendChild(ifr);
+}
+
+// 受け口
+window.addEventListener('message', (ev) => {
+  const data = ev.data;
+  if (!data || data.type !== 'drive-list') return;
+  const payload = data.payload || {};
+  if (payload.ok !== true || !Array.isArray(payload.items)) {
+    diag.textContent = 'list server err ' + (payload.error || '');
+    return;
+  }
+  list = payload.items;
+  diag.textContent = 'list ' + list.length;
+  if (!list.length) return;
+  if (idx < 0) { idx = -1; next(); scheduleNext(DURATION_MS); }
+});
+
+// ======= Base64 → Blob 変換（フォールバック用） =======
+function b64ToBlob(b64, mime) {
+  const bin = atob(b64);
+  const buf = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+  return new Blob([buf], { type: mime || 'application/octet-stream' });
+}
+
+// ======= 表示：直URL → 失敗時のみ Base64 フォールバック =======
+async function setImage(backEl, item, frontEl){
   backEl.alt = item.name || '';
   backEl.onload = () => {
     void backEl.offsetWidth; void frontEl.offsetWidth;
@@ -84,11 +92,41 @@ function setImage(backEl, item, frontEl){
       frontEl.classList.remove('active');
       setTimeout(()=>{ showingA = !showingA; }, TRANSITION_MS);
     }));
-    diag.textContent = 'loaded ' + (item.name||'');
+    diag.textContent = 'loaded ' + (item.name || '');
   };
-  backEl.onerror = () => { diag.textContent = 'error(img) ' + (item.name||''); };
+  backEl.onerror = async () => {
+    // 直URL失敗 → api=data でフォールバック
+    try {
+      diag.textContent = 'fallback ' + (item.name || '');
+      const res = await fetch(`${GAS_BASE}?api=data&id=${encodeURIComponent(item.id)}`, { cache: 'no-store' });
+      const txt = await res.text();
+      const json = JSON.parse(txt);
+      const okShape = (json && json.ok === true && json.mime && json.data) ||
+                      (json && !('ok' in json) && json.mime && json.data);
+      if (!okShape) throw new Error(json && json.error || 'invalid payload');
+
+      const blob = b64ToBlob(json.data, json.mime);
+      const url  = URL.createObjectURL(blob);
+      backEl.onload = () => {
+        void backEl.offsetWidth; void frontEl.offsetWidth;
+        requestAnimationFrame(()=>requestAnimationFrame(()=>{
+          backEl.classList.add('active');
+          frontEl.classList.remove('active');
+          setTimeout(()=>{ showingA = !showingA; }, TRANSITION_MS);
+        }));
+        diag.textContent = 'loaded(fb) ' + (item.name || '');
+        setTimeout(()=>URL.revokeObjectURL(url), 1000);
+      };
+      backEl.onerror = () => { diag.textContent = 'error(fb) ' + (item.name || ''); };
+      backEl.src = url;
+    } catch (e) {
+      console.error('fallback failed:', e);
+      diag.textContent = 'error(img) ' + (item.name || '');
+    }
+  };
+
   backEl.classList.remove('active'); void backEl.offsetWidth;
-  diag.textContent = 'loading ' + (item.name||'');
+  diag.textContent = 'loading ' + (item.name || '');
   backEl.src = toSrc(item);
 }
 
@@ -111,7 +149,7 @@ function scheduleNext(ms){
   }, ms);
 }
 
-// 起動
+// ======= 起動 =======
 diag.textContent = 'boot';
 fetchList();
 setInterval(fetchList, REFRESH_SEC * 1000);
