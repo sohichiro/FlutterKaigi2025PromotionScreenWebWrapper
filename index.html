@@ -65,10 +65,36 @@
       font-size: 12px; color: rgba(255,255,255,.6);
       background: rgba(0,0,0,.35); padding: 6px 10px; border-radius: 8px;
     }
+    #topbar{
+  　　position: absolute; top: 0; left: 0; right: 0;
+  　　padding: calc(env(safe-area-inset-top) + 6px) 12px 6px 12px;
+  　　display: flex; gap: 10px; align-items: center; justify-content: space-between;
+  　　background: linear-gradient(to bottom, rgba(0,0,0,.7), rgba(0,0,0,.2));
+  　　font-size: 12px; color: #fff; z-index: 10; pointer-events: none;
+　　}
+　　#clock{ font-variant-numeric: tabular-nums; font-weight: 600; opacity:.95 }
+　　#badges{ display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+　　.badge{
+  　　background: rgba(255,255,255,.12);
+  　　border: 1px solid rgba(255,255,255,.18);
+  　　padding: 4px 8px; border-radius: 999px; pointer-events: auto;
+　　}
+　　.badge.ok{ background: rgba(46,204,113,.2); border-color: rgba(46,204,113,.35); }
+　　.badge.warn{ background: rgba(241,196,15,.2); border-color: rgba(241,196,15,.35); }
+　　.badge.err{ background: rgba(231,76,60,.2); border-color: rgba(231,76,60,.35); }
   </style>
 </head>
 <body>
   <div id="stage">
+      <div id="topbar">
+        <div id="clock">--:--:--</div>
+        <div id="badges">
+            <span class="badge" id="badge-state">Loading</span>
+            <span class="badge" id="badge-net">Offline</span>
+            <span class="badge" id="badge-count">0 photos</span>
+            <span class="badge" id="badge-updated">—</span>
+        </div>
+    　</div>
     <div id="layerA" class="layer"></div>
     <div id="layerB" class="layer"></div>
     <div id="hint">タップで全画面 / 2本指で解除（ガイド使用時）</div>
@@ -100,17 +126,66 @@
     let inFlight = false;   // 遷移の同時実行防止
     let lastSwapAt = 0;     // 最後に画像が画面に出た時刻（ms）
 
+    // --- Topbar elements
+    const badgeState   = document.getElementById('badge-state');
+    const badgeNet     = document.getElementById('badge-net');
+    const badgeCount   = document.getElementById('badge-count');
+    const badgeUpdated = document.getElementById('badge-updated');
+    const clockEl      = document.getElementById('clock');
+
+    // 状態セット
+    function setAppState(kind, extraText){
+        // kind: 'loading' | 'playing' | 'paused' | 'updating' | 'error'
+        const map = {
+            loading: {text:'Loading', cls:'warn'},
+            playing: {text:'Playing', cls:'ok'},
+            paused:  {text:'Paused',  cls:'warn'},
+            updating:{text:'Updating',cls:'warn'},
+            error:   {text:'Error',   cls:'err'},
+          };
+        const m = map[kind] || {text:String(kind), cls:''};
+        badgeState.classList.remove('ok','warn','err');
+        if (m.cls) badgeState.classList.add(m.cls);
+        badgeState.textContent = extraText ? `${m.text}: ${extraText}` : m.text;
+    }
+
+    // ネットワーク表示
+    function refreshNetBadge(){
+        const online = navigator.onLine;
+        badgeNet.classList.remove('ok','warn','err');
+        badgeNet.classList.add(online ? 'ok' : 'err');
+        badgeNet.textContent = online ? 'Online' : 'Offline';
+    }
+    window.addEventListener('online',  refreshNetBadge);
+    window.addEventListener('offline', refreshNetBadge);
+    refreshNetBadge();
+
+    // 時計
+    function tickClock(){
+      const d = new Date();
+        // 24h表示、日本ロケール
+        clockEl.textContent = d.toLocaleTimeString('ja-JP', {hour12:false});
+    }
+    tickClock();
+    setInterval(tickClock, 1000);
+
+    // JSONの日時を人間向けに
+    function fmtTime(s){
+        try { return new Date(s).toLocaleString('ja-JP'); } catch { return s; }
+    }
+
     function status(msg) { statusEl.textContent = msg; }
 
     async function fetchList() {
-    status('読み込み中…');
+      setAppState('updating');
+      status('読み込み中…');
 
-    // 15秒タイムアウト
-    const ctrl = new AbortController();
-    const to = setTimeout(() => ctrl.abort(), 15000);
+      // 15秒タイムアウト
+      const ctrl = new AbortController();
+      const to = setTimeout(() => ctrl.abort(), 15000);
 
-    try {
-      const res = await fetch(`${API_BASE}?fn=list`, {
+      try {
+        const res = await fetch(`${API_BASE}?fn=list`, {
         cache: 'no-store',
         signal: ctrl.signal
       });
@@ -133,12 +208,30 @@
         return;
       }
 
-      items = Array.isArray(json.items) ? json.items : [];
+<!--      items = Array.isArray(json.items) ? json.items : [];
       if (!items.length) {
         status('画像が見つかりません（フォルダ/権限を確認）');
         return;
       }
-      status(`画像 ${items.length} 枚 / 更新 ${new Date(json.now).toLocaleString()}`);
+      status(`画像 ${items.length} 枚 / 更新 ${new Date(json.now).toLocaleString()}`);-->
+        // 旧URLなら img64 に差し替え（既に入れてる場合はそのままでOK）
+        items = (json.items || []).map(it => {
+        const u = new URL(it.url, location.href);
+        if (u.searchParams.get('fn') === 'image') u.searchParams.set('fn','img64');
+        return { ...it, url: u.toString() };
+        });
+
+        badgeCount.textContent = `${items.length} photos`;
+        badgeUpdated.textContent = `Updated ${fmtTime(json.now)}`;
+
+        if (!items.length) {
+            status('画像が見つかりません（フォルダ/権限を確認）');
+            setAppState('warn','No images');
+            return;
+        }
+        status(`画像 ${items.length} 枚 / 更新 ${fmtTime(json.now)}`);
+        // 実行中かどうかで状態
+        setAppState(running ? 'playing' : 'paused');      
     } catch (e) {
       console.error('fetch list error', e);
       status(e.name === 'AbortError' ? 'タイムアウト' : '通信エラー');
@@ -215,7 +308,9 @@ async function preload(url) {
       if (!it) { status('候補がありません'); return; }
 
       // どのURLで落ちてるか一緒に表示
-      status(`読み込み: ${it.name || ''}\n${it.url}`);
+      //status(`読み込み: ${it.name || ''}\n${it.url}`);
+      setAppState('loading', it.name || '');
+      status(`読み込み: ${it.name || ''}`);
 
       const img = await preload(it.url);
 
@@ -227,9 +322,13 @@ async function preload(url) {
       // この瞬間から表示時間カウント開始
       lastSwapAt = Date.now();
       status('');
+      setAppState(running ? 'playing' : 'paused');
     } catch (e) {
       console.error('showNext error', e);
       status(`読み込みエラー: ${String(e).slice(0,300)}`);
+      setAppState('error','Render');
+    } finally {
+        inFlight = false;
     }
   }
   
@@ -296,6 +395,8 @@ async function preload(url) {
       if (ev.touches.length === 2) {
         running = !running;
         status(running ? '再開' : '一時停止');
+        setAppState(running ? 'playing' : 'paused'); // ← 追加
+        if (running) scheduleNext(SLIDE_MS);
         setTimeout(()=>status(''),1500);
       }
       lastTouchCount = ev.touches.length;
