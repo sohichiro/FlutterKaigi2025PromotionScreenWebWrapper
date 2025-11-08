@@ -171,7 +171,6 @@
     // 時計
     function tickClock(){
       const d = new Date();
-        // 24h表示、日本ロケール
       clockEl.textContent = d.toLocaleTimeString('ja-JP', {hour12:false});
     }
     tickClock();
