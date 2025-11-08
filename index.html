@@ -1,158 +1,198 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="utf-8">
-<title>Drive Signage</title>
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black">
-<meta name="theme-color" content="#000000">
-<style>
-  html,body{margin:0;height:100%;background:#000;color:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Hiragino Sans","Noto Sans JP",Arial,sans-serif;overflow:hidden}
-  #stage{position:fixed;inset:0;display:grid;place-items:center;width:100dvw;height:100dvh;background:#000}
-  .slide{position:absolute;inset:0;width:100dvw;height:100dvh;object-fit:contain;opacity:0;transition:opacity 600ms ease;will-change:opacity;pointer-events:none}
-  .slide.active{opacity:1}
-  .caption{position:absolute;left:0;right:0;bottom:0;padding:.6rem 1rem;background:rgba(0,0,0,.35);font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  #diag{position:fixed;left:8px;top:8px;background:rgba(0,0,0,.6);color:#0f0;font:12px/1.4 monospace;padding:6px 8px;border-radius:6px;z-index:9999}
-  @supports not (height:100dvh){#stage,.slide{width:100vw;height:100vh}}
-</style>
+  <meta charset="utf-8" />
+  <meta
+    name="viewport"
+    content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"
+  >
+  <title>Drive Slideshow</title>
+  <style>
+    html, body {
+      margin: 0; padding: 0; height: 100%;
+      background: #000; color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Sans", "Noto Sans JP", Arial, sans-serif;
+    }
+    #stage {
+      position: fixed; inset: 0; overflow: hidden; background: #000;
+      display: grid; place-items: center;
+      cursor: none;
+    }
+    .layer {
+      position: absolute; inset: 0;
+      display: grid; place-items: center;
+      opacity: 0; transition: opacity 1000ms ease;
+      background: #000;
+    }
+    .layer.show { opacity: 1; }
+    img {
+      max-width: 100vw; max-height: 100vh;
+      width: auto; height: auto;
+      object-fit: contain; image-rendering: auto;
+      background: #000;
+      -webkit-user-select: none; user-select: none;
+      -webkit-touch-callout: none;
+    }
+    #hud {
+      position: absolute; right: 12px; bottom: 10px; left: 12px;
+      display: flex; justify-content: space-between; align-items: center;
+      opacity: .0; transition: opacity .3s;
+      font-size: 12px; color: rgba(255,255,255,.8);
+      pointer-events: none;
+    }
+    #stage:hover #hud { opacity: .9; }
+    .pill {
+      background: rgba(0,0,0,.45);
+      padding: 6px 10px; border-radius: 999px;
+    }
+    .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: rgba(255,255,255,.6);
+      display: inline-block; margin-left: 6px;
+    }
+    .dot.on { background: #fff; }
+    #hint {
+      position: absolute; top: 12px; left: 12px;
+      font-size: 12px; color: rgba(255,255,255,.6);
+      background: rgba(0,0,0,.35); padding: 6px 10px; border-radius: 8px;
+    }
+  </style>
 </head>
 <body>
-<div id="stage">
-  <img id="a" class="slide" alt="">
-  <img id="b" class="slide" alt="">
-  <div class="caption" id="cap"></div>
-</div>
-<div id="diag">boot…</div>
+  <div id="stage">
+    <div id="layerA" class="layer"></div>
+    <div id="layerB" class="layer"></div>
+    <div id="hint">タップで全画面 / 2本指で解除（ガイド使用時）</div>
+    <div id="hud">
+      <div class="pill">新しい写真ほど表示頻度↑</div>
+      <div class="pill" id="status">—</div>
+    </div>
+  </div>
 
-<script>
-// ======= 設定（必ずあなたの /exec に置き換え） =======
-const GAS_BASE = 'https://script.google.com/macros/s/AKfycbxF5les5Hlm6qzo6Iixur72lkLtsshsqXXETkRdY9nIIm2hYTxYlMnfnOMdzEaAf4mV/exec';
-const REFRESH_SEC = 30;   // 何秒ごとに一覧を取り直すか
-const DURATION_MS = 5000; // 1枚の表示時間
-const TRANSITION_MS = 600;// フェード時間
+  <script>
+    // ====== 設定 ======
+    const API_BASE = 'https://script.google.com/macros/s/REPLACE_WITH_DEPLOY_ID/exec'; // ★GASの実行URL
+    const SLIDE_MS = 8000;   // 1枚の表示時間
+    const FADE_MS  = 1000;   // フェード時間
+    const HALF_LIFE_HOURS = 6; // 新しさ重み付けの半減期（短いほど新着を強く優遇）
+    const SHUFFLE_BATCH = 20; // 一度に候補に乗せる枚数（重み抽選の母集団上限）
 
-// ======= 参照・状態 =======
-const imgA = document.getElementById('a');
-const imgB = document.getElementById('b');
-const cap  = document.getElementById('cap');
-const diag = document.getElementById('diag');
-let list = [], idx = -1, showingA = true, timer = null;
+    const layerA = document.getElementById('layerA');
+    const layerB = document.getElementById('layerB');
+    const statusEl = document.getElementById('status');
+    let currentLayer = layerA;
+    let nextLayer = layerB;
+    let items = []; // {url, updatedAt, ...}
+    let timer = null;
+    let running = true;
 
-// ======= 画像URL（直リンク：CORS不要） =======
-function toSrc(item){
-  return `${GAS_BASE}?id=${encodeURIComponent(item.id)}&t=${item.updated}`;
-}
-
-// ======= JSONPの代わりに postMessage で一覧取得（CORS回避で安定） =======
-function fetchList(){
-  // 古いiframeを掃除
-  const old = document.getElementById('list_iframe');
-  if (old) old.remove();
-
-  const ifr = document.createElement('iframe');
-  ifr.id = 'list_iframe';
-  ifr.style.display = 'none';
-  // GAS 側 doGet に api=embed&view=list を実装済み想定（親に postMessage で返す）
-  ifr.src = `${GAS_BASE}?api=embed&view=list&_=${Date.now()}`;
-  ifr.onerror = () => { diag.textContent = 'list iframe err'; };
-  document.body.appendChild(ifr);
-}
-
-// 受け口
-window.addEventListener('message', (ev) => {
-  const data = ev.data;
-  if (!data || data.type !== 'drive-list') return;
-  const payload = data.payload || {};
-  if (payload.ok !== true || !Array.isArray(payload.items)) {
-    diag.textContent = 'list server err ' + (payload.error || '');
-    return;
-  }
-  list = payload.items;
-  diag.textContent = 'list ' + list.length;
-  if (!list.length) return;
-  if (idx < 0) { idx = -1; next(); scheduleNext(DURATION_MS); }
-});
-
-// ======= Base64 → Blob 変換（フォールバック用） =======
-function b64ToBlob(b64, mime) {
-  const bin = atob(b64);
-  const buf = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
-  return new Blob([buf], { type: mime || 'application/octet-stream' });
-}
-
-// ======= 表示：直URL → 失敗時のみ Base64 フォールバック =======
-async function setImage(backEl, item, frontEl){
-  backEl.alt = item.name || '';
-  backEl.onload = () => {
-    void backEl.offsetWidth; void frontEl.offsetWidth;
-    requestAnimationFrame(()=>requestAnimationFrame(()=>{
-      backEl.classList.add('active');
-      frontEl.classList.remove('active');
-      setTimeout(()=>{ showingA = !showingA; }, TRANSITION_MS);
-    }));
-    diag.textContent = 'loaded ' + (item.name || '');
-  };
-  backEl.onerror = async () => {
-    // 直URL失敗 → api=data でフォールバック
-    try {
-      diag.textContent = 'fallback ' + (item.name || '');
-      const res = await fetch(`${GAS_BASE}?api=data&id=${encodeURIComponent(item.id)}`, { cache: 'no-store' });
-      const txt = await res.text();
-      const json = JSON.parse(txt);
-      const okShape = (json && json.ok === true && json.mime && json.data) ||
-                      (json && !('ok' in json) && json.mime && json.data);
-      if (!okShape) throw new Error(json && json.error || 'invalid payload');
-
-      const blob = b64ToBlob(json.data, json.mime);
-      const url  = URL.createObjectURL(blob);
-      backEl.onload = () => {
-        void backEl.offsetWidth; void frontEl.offsetWidth;
-        requestAnimationFrame(()=>requestAnimationFrame(()=>{
-          backEl.classList.add('active');
-          frontEl.classList.remove('active');
-          setTimeout(()=>{ showingA = !showingA; }, TRANSITION_MS);
-        }));
-        diag.textContent = 'loaded(fb) ' + (item.name || '');
-        setTimeout(()=>URL.revokeObjectURL(url), 1000);
-      };
-      backEl.onerror = () => { diag.textContent = 'error(fb) ' + (item.name || ''); };
-      backEl.src = url;
-    } catch (e) {
-      console.error('fallback failed:', e);
-      diag.textContent = 'error(img) ' + (item.name || '');
+    async function fetchList() {
+      status('読み込み中…');
+      const res = await fetch(`${API_BASE}?fn=list`, { cache: 'no-store' });
+      const json = await res.json();
+      items = json.items || [];
+      if (!items.length) {
+        status('画像が見つかりません');
+        return;
+      }
+      status(`画像 ${items.length} 枚 / 更新 ${new Date(json.now).toLocaleString()}`);
     }
-  };
 
-  backEl.classList.remove('active'); void backEl.offsetWidth;
-  diag.textContent = 'loading ' + (item.name || '');
-  backEl.src = toSrc(item);
-}
+    function status(msg) { statusEl.textContent = msg; }
 
-function show(i){
-  if (!list.length) return;
-  idx = (i + list.length) % list.length;
-  const item = list[idx];
-  const front = showingA ? imgA : imgB;
-  const back  = showingA ? imgB : imgA;
-  setImage(back, item, front);
-  cap.textContent = item.name || '';
-}
+    // 新しさ優遇の重み抽選：重み = exp(-(経過時間)/tau)
+    function pickNextWeighted() {
+      if (!items.length) return null;
+      const now = Date.now();
+      const tau = HALF_LIFE_HOURS * 3600 * 1000 / Math.log(2); // 半減期→時定数
+      const pool = items.slice(0, Math.min(items.length, SHUFFLE_BATCH)); // 先頭は新しい順
+      const weights = pool.map(it => {
+        const age = Math.max(0, now - new Date(it.updatedAt).getTime());
+        return Math.exp(-age / tau);
+      });
+      const sum = weights.reduce((a,b)=>a+b,0);
+      let r = Math.random() * sum;
+      for (let i = 0; i < pool.length; i++) {
+        r -= weights[i];
+        if (r <= 0) return pool[i];
+      }
+      return pool[pool.length - 1];
+    }
 
-function next(){ show(idx + 1); }
-function scheduleNext(ms){
-  if (timer) clearTimeout(timer);
-  timer = setTimeout(()=>{
-    next();
-    setTimeout(()=>scheduleNext(DURATION_MS), TRANSITION_MS);
-  }, ms);
-}
+    function preload(url) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.decoding = 'async';
+        img.src = url;
+      });
+    }
 
-// ======= 起動 =======
-diag.textContent = 'boot';
-fetchList();
-setInterval(fetchList, REFRESH_SEC * 1000);
-</script>
+    async function showNext() {
+      try {
+        const it = pickNextWeighted();
+        if (!it) return;
+        const img = await preload(it.url);
+
+        // 次レイヤへ挿入
+        nextLayer.innerHTML = '';
+        nextLayer.appendChild(img);
+        // フェード
+        nextLayer.classList.add('show');
+        currentLayer.classList.remove('show');
+
+        // レイヤをスワップ
+        [currentLayer, nextLayer] = [nextLayer, currentLayer];
+      } catch (e) {
+        console.error(e);
+        status('読み込みエラー');
+      }
+    }
+
+    function startLoop() {
+      if (timer) clearInterval(timer);
+      timer = setInterval(() => { if (running) showNext(); }, SLIDE_MS);
+    }
+
+    // 全画面切替（iPhone Safari）
+    async function toggleFullscreen() {
+      const el = document.documentElement;
+      try {
+        if (!document.fullscreenElement) {
+          if (el.requestFullscreen) await el.requestFullscreen();
+        } else {
+          await document.exitFullscreen();
+        }
+      } catch (e) { /* ignore */ }
+    }
+
+    // 初期化
+    (async () => {
+      await fetchList();
+      if (!items.length) return;
+
+      // 最初の1枚をすぐ表示
+      await showNext();
+      currentLayer.classList.add('show');
+      startLoop();
+
+      // 5分おきに最新リストを再取得（新規ファイル追加を拾う）
+      setInterval(fetchList, 5 * 60 * 1000);
+    })();
+
+    // タップでフルスクリーン
+    document.getElementById('stage').addEventListener('click', () => toggleFullscreen());
+    // 2本指タップで一時停止/再開（ガイド中の簡易操作）
+    let lastTouchCount = 0;
+    window.addEventListener('touchstart', (ev) => {
+      if (ev.touches.length === 2) {
+        running = !running;
+        status(running ? '再開' : '一時停止');
+        setTimeout(()=>status(''),1500);
+      }
+      lastTouchCount = ev.touches.length;
+    }, {passive:true});
+  </script>
 </body>
 </html>
