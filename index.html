@@ -1,44 +1,120 @@
 <!doctype html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8">
-  <title>Signage</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <!-- iOS: スタンドアロン有効化 -->
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <!-- Android系の色 -->
-  <meta name="theme-color" content="#000000">
-
-  <!-- あると丁寧：ホーム画面アイコン -->
-  <link rel="apple-touch-icon" href="icon-180.png">
-  <style>
-    html, body {
-      margin: 0; height: 100%; background:#000; overflow:hidden;
-    }
-    iframe {
-      position: fixed; inset: 0;
-      width: 100dvw; height: 100dvh;
-      border: 0; background:#000;
-    }
-    /* dvh非対応の古い環境向けフォールバック */
-    @supports not (height: 100dvh) {
-      iframe { width: 100vw; height: 100vh; }
-    }
-  </style>
+<meta charset="utf-8">
+<title>Signage</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="theme-color" content="#000000">
+<style>
+  html,body{margin:0;height:100%;background:#000;color:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Hiragino Sans","Noto Sans JP",Arial,sans-serif;overflow:hidden}
+  #stage{position:fixed;inset:0;display:grid;place-items:center;width:100dvw;height:100dvh;background:#000}
+  .slide{position:absolute;inset:0;width:100dvw;height:100dvh;object-fit:contain;opacity:0;transition:opacity 600ms ease;will-change:opacity;pointer-events:none}
+  .slide.active{opacity:1}
+  .caption{position:absolute;left:0;right:0;bottom:0;padding:.6rem 1rem;background:rgba(0,0,0,.35);font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #diag{position:fixed;left:8px;top:8px;background:rgba(0,0,0,.6);color:#0f0;font:12px/1.4 monospace;padding:6px 8px;border-radius:6px;z-index:9999}
+  @supports not (height:100dvh){#stage,.slide{width:100vw;height:100vh}}
+</style>
 </head>
 <body>
-  <!-- GASのWebアプリURLをsrcへ。allowは保険 -->
-  <iframe
-    src="https://script.google.com/macros/s/AKfycbysQVgidwdcGL1X2QEwLUexONKlvje6A-fSa2yt7EFjniFCXkpatv9JqSv-VaaN7qbV/exec"
-    allow="fullscreen; clipboard-read; clipboard-write">
-  </iframe>
+<div id="stage">
+  <img id="a" class="slide" alt="">
+  <img id="b" class="slide" alt="">
+  <div class="caption" id="cap"></div>
+</div>
+<div id="diag">boot…</div>
 
-  <!-- スタンドアロン判定。falseなら案内を出す（任意） -->
-  <script>
-    if (!('standalone' in navigator) || !navigator.standalone) {
-      console.log('Tip: ホーム画面に追加すると全画面表示になります。');
+<script>
+// ===== 設定 =====
+const GAS_BASE = 'https://script.google.com/macros/s/AKfycbysQVgidwdcGL1X2QEwLUexONKlvje6A-fSa2yt7EFjniFCXkpatv9JqSv-VaaN7qbV/exec'; // ←あなたのexecに置換
+const REFRESH_SEC = 30;
+const DURATION_MS = 5000;
+const TRANSITION_MS = 600;
+
+// ===== 状態・参照 =====
+const imgA = document.getElementById('a');
+const imgB = document.getElementById('b');
+const cap  = document.getElementById('cap');
+const diag = document.getElementById('diag');
+let list = [], idx = -1, showingA = true, timer = null;
+
+// ===== JSONP: list の受け口 =====
+function __receiveList(payload){
+  try{
+    if (!payload || payload.ok !== true || !Array.isArray(payload.items)) {
+      diag.textContent = 'list payload NG';
+      return;
     }
-  </script>
+    list = payload.items;
+    diag.textContent = 'list ' + list.length;
+    if (!list.length) return;
+    if (idx < 0) { idx = -1; next(); scheduleNext(DURATION_MS); }
+  }catch(e){
+    diag.textContent = 'list err ' + e.message;
+  }
+}
+
+// JSONP 呼び出し
+function fetchList(){
+  const cb = '__receiveList';
+  const s = document.createElement('script');
+  s.src = `${GAS_BASE}?api=list&callback=${cb}&_=${Date.now()}`;
+  s.async = true;
+  s.onerror = () => { diag.textContent = 'list http err'; };
+  // 既存のタグは都度捨てる
+  const prev = document.getElementById('jsonp_list');
+  if (prev) prev.remove();
+  s.id = 'jsonp_list';
+  document.body.appendChild(s);
+}
+
+// 画像URL（<img src> 直参照）
+function toSrc(item){
+  return `${GAS_BASE}?id=${encodeURIComponent(item.id)}&t=${item.updated}`;
+}
+
+// 表示
+function setImage(backEl, item, frontEl){
+  backEl.alt = item.name || '';
+  backEl.onload = () => {
+    void backEl.offsetWidth; void frontEl.offsetWidth;
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      backEl.classList.add('active');
+      frontEl.classList.remove('active');
+      setTimeout(()=>{ showingA = !showingA; }, TRANSITION_MS);
+    }));
+    diag.textContent = 'loaded ' + (item.name||'');
+  };
+  backEl.onerror = () => { diag.textContent = 'error(img) ' + (item.name||''); };
+  backEl.classList.remove('active'); void backEl.offsetWidth;
+  diag.textContent = 'loading ' + (item.name||'');
+  backEl.src = toSrc(item);
+}
+
+function show(i){
+  if (!list.length) return;
+  idx = (i + list.length) % list.length;
+  const item = list[idx];
+  const front = showingA ? imgA : imgB;
+  const back  = showingA ? imgB : imgA;
+  setImage(back, item, front);
+  cap.textContent = item.name || '';
+}
+
+function next(){ show(idx + 1); }
+function scheduleNext(ms){
+  if (timer) clearTimeout(timer);
+  timer = setTimeout(()=>{
+    next();
+    setTimeout(()=>scheduleNext(DURATION_MS), TRANSITION_MS);
+  }, ms);
+}
+
+// 起動
+diag.textContent = 'boot';
+fetchList();
+setInterval(fetchList, REFRESH_SEC * 1000);
+</script>
 </body>
 </html>
