@@ -1,110 +1,194 @@
 <!DOCTYPE html>
 <html lang="ja">
+
 <head>
   <meta charset="utf-8" />
   <meta name="apple-mobile-web-app-capable" content="yes">
-　<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-　<meta name="theme-color" content="#000000">
-  <meta
-    name="viewport"
-    content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"
-  >
-  
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#000000">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+
   <title>Drive Slideshow</title>
   <style>
-    html, body {
-      margin: 0; padding: 0; height: 100%;
-      background: #000; color: #fff;
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background: #000;
+      color: #fff;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Sans", "Noto Sans JP", Arial, sans-serif;
     }
+
     #stage {
-      position: fixed; inset: 0; overflow: hidden; background: #000;
-      display: grid; place-items: center;
+      position: fixed;
+      inset: 0;
+      overflow: hidden;
+      background: #000;
+      display: grid;
+      place-items: center;
       cursor: none;
     }
+
     .layer {
-      position: absolute; inset: 0;
-      display: grid; place-items: center;
-      opacity: 0; transition: opacity 1000ms ease;
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      opacity: 0;
+      transition: opacity 1000ms ease;
       background: #000;
     }
-    .layer.show { opacity: 1; }
+
+    .layer.show {
+      opacity: 1;
+    }
+
     img {
-      max-width: 100vw; max-height: 100vh;
-      width: auto; height: auto;
-      object-fit: contain; image-rendering: auto;
+      max-width: 100vw;
+      max-height: 100vh;
+      width: auto;
+      height: auto;
+      object-fit: contain;
+      image-rendering: auto;
       background: #000;
-      -webkit-user-select: none; user-select: none;
+      -webkit-user-select: none;
+      user-select: none;
       -webkit-touch-callout: none;
     }
+
     #hud {
-      position: absolute; right: 12px; bottom: 10px; left: 12px;
-      display: flex; justify-content: space-between; align-items: center;
-      opacity: .0; transition: opacity .3s;
-      font-size: 12px; color: rgba(255,255,255,.8);
+      position: absolute;
+      right: 12px;
+      bottom: 10px;
+      left: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      opacity: .0;
+      transition: opacity .3s;
+      font-size: 12px;
+      color: rgba(255, 255, 255, .8);
       pointer-events: none;
     }
-    #stage:hover #hud { opacity: .9; }
+
+    #stage:hover #hud {
+      opacity: .9;
+    }
+
     .pill {
-      background: rgba(0,0,0,.45);
-      padding: 6px 10px; border-radius: 999px;
+      background: rgba(0, 0, 0, .45);
+      padding: 6px 10px;
+      border-radius: 999px;
     }
+
     .dot {
-      width: 8px; height: 8px; border-radius: 50%;
-      background: rgba(255,255,255,.6);
-      display: inline-block; margin-left: 6px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, .6);
+      display: inline-block;
+      margin-left: 6px;
     }
-    .dot.on { background: #fff; }
+
+    .dot.on {
+      background: #fff;
+    }
+
     #hint {
-      position: absolute; top: 12px; left: 12px;
-      font-size: 12px; color: rgba(255,255,255,.6);
-      background: rgba(0,0,0,.35); padding: 6px 10px; border-radius: 8px;
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      font-size: 12px;
+      color: rgba(255, 255, 255, .6);
+      background: rgba(0, 0, 0, .35);
+      padding: 6px 10px;
+      border-radius: 8px;
     }
-    #topbar{
-  　　position: absolute; top: 0; left: 0; right: 0;
-  　　padding: calc(env(safe-area-inset-top) + 6px) 12px 6px 12px;
-  　　display: flex; gap: 10px; align-items: center; justify-content: space-between;
-  　　background: linear-gradient(to bottom, rgba(0,0,0,.7), rgba(0,0,0,.2));
-  　　font-size: 12px; color: #fff; z-index: 10; pointer-events: none;
-　　}
-　　#clock{ font-variant-numeric: tabular-nums; font-weight: 600; opacity:.95 }
-　　#badges{ display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
-　　.badge{
-  　　background: rgba(255,255,255,.12);
-  　　border: 1px solid rgba(255,255,255,.18);
-  　　padding: 4px 8px; border-radius: 999px; pointer-events: auto;
-　　}
-　　.badge.ok{ background: rgba(46,204,113,.2); border-color: rgba(46,204,113,.35); }
-　　.badge.warn{ background: rgba(241,196,15,.2); border-color: rgba(241,196,15,.35); }
-　　.badge.err{ background: rgba(231,76,60,.2); border-color: rgba(231,76,60,.35); }
-    #clock-fixed{
-    　position: absolute;
-    　right: calc(env(safe-area-inset-right) + 16px);
-    　bottom: calc(env(safe-area-inset-bottom) + 16px);
-    　font-size: 26px;
-    　font-weight: 600;
-    　font-variant-numeric: tabular-nums;
-    　color: rgba(255,255,255,0.9);
-    　text-shadow: 0 0 4px rgba(0,0,0,0.7);
-    　pointer-events: none;   /* 触れられなくてOK */
-    　z-index: 20;
+
+    #topbar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      padding: calc(env(safe-area-inset-top) + 6px) 12px 6px 12px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+      background: linear-gradient(to bottom, rgba(0, 0, 0, .7), rgba(0, 0, 0, .2));
+      font-size: 12px;
+      color: #fff;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    #clock {
+      font-variant-numeric: tabular-nums;
+      font-weight: 600;
+      opacity: .95
+    }
+
+    #badges {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .badge {
+      background: rgba(255, 255, 255, .12);
+      border: 1px solid rgba(255, 255, 255, .18);
+      padding: 4px 8px;
+      border-radius: 999px;
+      pointer-events: auto;
+    }
+
+    .badge.ok {
+      background: rgba(46, 204, 113, .2);
+      border-color: rgba(46, 204, 113, .35);
+    }
+
+    .badge.warn {
+      background: rgba(241, 196, 15, .2);
+      border-color: rgba(241, 196, 15, .35);
+    }
+
+    .badge.err {
+      background: rgba(231, 76, 60, .2);
+      border-color: rgba(231, 76, 60, .35);
+    }
+
+    #clock-fixed {
+      position: absolute;
+      right: calc(env(safe-area-inset-right) + 16px);
+      bottom: calc(env(safe-area-inset-bottom) + 16px);
+      font-size: 26px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      color: rgba(255, 255, 255, 0.9);
+      text-shadow: 0 0 4px rgba(0, 0, 0, 0.7);
+      pointer-events: none;
+      /* 触れられなくてOK */
+      z-index: 20;
     }
   </style>
 </head>
+
 <body>
   <div id="stage">
-      <div id="topbar">
-        
-        <div id="badges">
-            <span class="badge" id="badge-state">Loading</span>
-            <span class="badge" id="badge-net">Offline</span>
-            <span class="badge" id="badge-count">0 photos</span>
-            <span class="badge" id="badge-updated">—</span>
-        </div>
-    　</div>
+    <div id="topbar">
+
+      <div id="badges">
+        <span class="badge" id="badge-state">Loading</span>
+        <span class="badge" id="badge-net">Offline</span>
+        <span class="badge" id="badge-count">0 photos</span>
+        <span class="badge" id="badge-updated">—</span>
+      </div>
+    </div>
     <div id="layerA" class="layer"></div>
     <div id="layerB" class="layer"></div>
-    <div id="clock">--:--:--</div>
+    <div id="clock-fixed">--:--:--</div>
     <div id="hint">タップで全画面 / 2本指で解除（ガイド使用時）</div>
     <div id="hud">
       <div class="pill">新しい写真ほど表示頻度↑</div>
@@ -116,7 +200,7 @@
     // ====== 設定 ======
     const API_BASE = 'https://script.google.com/macros/s/AKfycbyK7JT5E6ctMZL0onVeocYaquszf7e1eZk2scOhhCy_H4gQsp1mOXtBAIrXz6br_LY/exec'; // ★GASの実行URL
     const SLIDE_MS = 30000;   // 1枚の表示時間
-    const FADE_MS  = 2000;   // フェード時間
+    const FADE_MS = 2000;   // フェード時間
     const HALF_LIFE_HOURS = 6; // 新しさ重み付けの半減期（短いほど新着を強く優遇）
     const SHUFFLE_BATCH = 20; // 一度に候補に乗せる枚数（重み抽選の母集団上限）
 
@@ -128,57 +212,57 @@
     let items = []; // {url, updatedAt, ...}
     let timer = null;
     let running = true;
-    
+
     // ★ 追加: ループ管理
     let loopHandle = null;
     let inFlight = false;   // 遷移の同時実行防止
     let lastSwapAt = 0;     // 最後に画像が画面に出た時刻（ms）
 
     // --- Topbar elements
-    const badgeState   = document.getElementById('badge-state');
-    const badgeNet     = document.getElementById('badge-net');
-    const badgeCount   = document.getElementById('badge-count');
+    const badgeState = document.getElementById('badge-state');
+    const badgeNet = document.getElementById('badge-net');
+    const badgeCount = document.getElementById('badge-count');
     const badgeUpdated = document.getElementById('badge-updated');
-    const clockEl      = document.getElementById('clock-fixed');
+    const clockEl = document.getElementById('clock-fixed');
 
     // 状態セット
-    function setAppState(kind, extraText){
-        // kind: 'loading' | 'playing' | 'paused' | 'updating' | 'error'
-        const map = {
-            loading: {text:'Loading', cls:'warn'},
-            playing: {text:'Playing', cls:'ok'},
-            paused:  {text:'Paused',  cls:'warn'},
-            updating:{text:'Updating',cls:'warn'},
-            error:   {text:'Error',   cls:'err'},
-          };
-        const m = map[kind] || {text:String(kind), cls:''};
-        badgeState.classList.remove('ok','warn','err');
-        if (m.cls) badgeState.classList.add(m.cls);
-        badgeState.textContent = extraText ? `${m.text}: ${extraText}` : m.text;
+    function setAppState(kind, extraText) {
+      // kind: 'loading' | 'playing' | 'paused' | 'updating' | 'error'
+      const map = {
+        loading: { text: 'Loading', cls: 'warn' },
+        playing: { text: 'Playing', cls: 'ok' },
+        paused: { text: 'Paused', cls: 'warn' },
+        updating: { text: 'Updating', cls: 'warn' },
+        error: { text: 'Error', cls: 'err' },
+      };
+      const m = map[kind] || { text: String(kind), cls: '' };
+      badgeState.classList.remove('ok', 'warn', 'err');
+      if (m.cls) badgeState.classList.add(m.cls);
+      badgeState.textContent = extraText ? `${m.text}: ${extraText}` : m.text;
     }
 
     // ネットワーク表示
-    function refreshNetBadge(){
-        const online = navigator.onLine;
-        badgeNet.classList.remove('ok','warn','err');
-        badgeNet.classList.add(online ? 'ok' : 'err');
-        badgeNet.textContent = online ? 'Online' : 'Offline';
+    function refreshNetBadge() {
+      const online = navigator.onLine;
+      badgeNet.classList.remove('ok', 'warn', 'err');
+      badgeNet.classList.add(online ? 'ok' : 'err');
+      badgeNet.textContent = online ? 'Online' : 'Offline';
     }
-    window.addEventListener('online',  refreshNetBadge);
+    window.addEventListener('online', refreshNetBadge);
     window.addEventListener('offline', refreshNetBadge);
     refreshNetBadge();
 
     // 時計
-    function tickClock(){
+    function tickClock() {
       const d = new Date();
-      clockEl.textContent = d.toLocaleTimeString('ja-JP', {hour12:false});
+      clockEl.textContent = d.toLocaleTimeString('ja-JP', { hour12: false });
     }
     tickClock();
     setInterval(tickClock, 1000);
 
     // JSONの日時を人間向けに
-    function fmtTime(s){
-        try { return new Date(s).toLocaleString('ja-JP'); } catch { return s; }
+    function fmtTime(s) {
+      try { return new Date(s).toLocaleString('ja-JP'); } catch { return s; }
     }
 
     function status(msg) { statusEl.textContent = msg; }
@@ -193,55 +277,53 @@
 
       try {
         const res = await fetch(`${API_BASE}?fn=list`, {
-        cache: 'no-store',
-        signal: ctrl.signal
-      });
+          cache: 'no-store',
+          signal: ctrl.signal
+        });
 
-      // ステータス非200でも本文をログ
-      if (!res.ok) {
-        const text = await res.text().catch(()=> '');
-        console.error('list non-OK', res.status, text);
-        status(`読み込み失敗 (${res.status})`);
-        return;
-      }
+        // ステータス非200でも本文をログ
+        if (!res.ok) {
+          const text = await res.text().catch(() => '');
+          console.error('list non-OK', res.status, text);
+          status(`読み込み失敗 (${res.status})`);
+          return;
+        }
 
-      let json;
-      try {
-        json = await res.json();
-      } catch (e) {
-        const text = await res.text().catch(()=> '');
-        console.error('JSON parse error. body=', text);
-        status('JSON解析エラー');
-        return;
-      }
+        let json;
+        try {
+          json = await res.json();
+        } catch (e) {
+          const text = await res.text().catch(() => '');
+          console.error('JSON parse error. body=', text);
+          status('JSON解析エラー');
+          return;
+        }
 
         // 旧URLなら img64 に差し替え（既に入れてる場合はそのままでOK）
         items = (json.items || []).map(it => {
-        const u = new URL(it.url, location.href);
-        if (u.searchParams.get('fn') === 'image') u.searchParams.set('fn','img64');
-        return { ...it, url: u.toString() };
+          const u = new URL(it.url, location.href);
+          if (u.searchParams.get('fn') === 'image') u.searchParams.set('fn', 'img64');
+          return { ...it, url: u.toString() };
         });
 
         badgeCount.textContent = `${items.length} photos`;
         badgeUpdated.textContent = `Updated ${fmtTime(json.now)}`;
 
         if (!items.length) {
-            status('画像が見つかりません（フォルダ/権限を確認）');
-            setAppState('warn','No images');
-            return;
+          status('画像が見つかりません（フォルダ/権限を確認）');
+          setAppState('warn', 'No images');
+          return;
         }
         status(`画像 ${items.length} 枚 / 更新 ${fmtTime(json.now)}`);
         // 実行中かどうかで状態
-        setAppState(running ? 'playing' : 'paused');      
-    } catch (e) {
-      console.error('fetch list error', e);
-      status(e.name === 'AbortError' ? 'タイムアウト' : '通信エラー');
-    } finally {
-      clearTimeout(to);
+        setAppState(running ? 'playing' : 'paused');
+      } catch (e) {
+        console.error('fetch list error', e);
+        status(e.name === 'AbortError' ? 'タイムアウト' : '通信エラー');
+      } finally {
+        clearTimeout(to);
+      }
     }
-  }
-
-    function status(msg) { statusEl.textContent = msg; }
 
     // 新しさ優遇の重み抽選：重み = exp(-(経過時間)/tau)
     function pickNextWeighted() {
@@ -253,7 +335,7 @@
         const age = Math.max(0, now - new Date(it.updatedAt).getTime());
         return Math.exp(-age / tau);
       });
-      const sum = weights.reduce((a,b)=>a+b,0);
+      const sum = weights.reduce((a, b) => a + b, 0);
       let r = Math.random() * sum;
       for (let i = 0; i < pool.length; i++) {
         r -= weights[i];
@@ -262,99 +344,99 @@
       return pool[pool.length - 1];
     }
 
-async function preload(url) {
-    const ctrl = new AbortController();
-    const to = setTimeout(() => ctrl.abort(), 15000);
-    try {
-      const res = await fetch(url, { cache: 'no-store', signal: ctrl.signal });
-      if (!res.ok) {
-        const text = await res.text().catch(()=> '');
-        throw new Error(`HTTP ${res.status} ${text?.slice(0,200)}`);
-      }
-      let payload;
+    async function preload(url) {
+      const ctrl = new AbortController();
+      const to = setTimeout(() => ctrl.abort(), 15000);
       try {
-        payload = await res.json();
+        const res = await fetch(url, { cache: 'no-store', signal: ctrl.signal });
+        if (!res.ok) {
+          const text = await res.text().catch(() => '');
+          throw new Error(`HTTP ${res.status} ${text?.slice(0, 200)}`);
+        }
+        let payload;
+        try {
+          payload = await res.json();
+        } catch (e) {
+          const text = await res.text().catch(() => '');
+          throw new Error(`JSON解析失敗 ${text?.slice(0, 200)}`);
+        }
+        if (payload?.error) {
+          // エラー本文をそのまま可視化
+          throw new Error(`img64 error: ${payload.error}`);
+        }
+        const mime = payload?.mime || 'image/jpeg';
+        const b64 = payload?.data;
+        if (!b64) throw new Error('data欠落');
+
+        const src = `data:${mime};base64,${b64}`;
+        const img = new Image();
+        img.decoding = 'async';
+        img.src = src;
+        await new Promise((resolve, reject) => {
+          img.onload = () => resolve();
+          img.onerror = () => reject(new Error('img onerror'));
+          setTimeout(() => resolve(), 0);
+        });
+        return img;
+      } finally {
+        clearTimeout(to);
+      }
+    }
+
+    async function showNext() {
+      if (inFlight) return;       // ★ 二重起動ガード
+      inFlight = true;
+      try {
+        const it = pickNextWeighted();
+        if (!it) { status('候補がありません'); return; }
+
+        // どのURLで落ちてるか一緒に表示
+        //status(`読み込み: ${it.name || ''}\n${it.url}`);
+        setAppState('loading', it.name || '');
+        status(`読み込み: ${it.name || ''}`);
+
+        const img = await preload(it.url);
+
+        nextLayer.innerHTML = '';
+        nextLayer.appendChild(img);
+        nextLayer.classList.add('show');
+        currentLayer.classList.remove('show');
+        [currentLayer, nextLayer] = [nextLayer, currentLayer];
+        // この瞬間から表示時間カウント開始
+        lastSwapAt = Date.now();
+        status('');
+        setAppState(running ? 'playing' : 'paused');
       } catch (e) {
-        const text = await res.text().catch(()=> '');
-        throw new Error(`JSON解析失敗 ${text?.slice(0,200)}`);
-      }
-      if (payload?.error) {
-        // エラー本文をそのまま可視化
-        throw new Error(`img64 error: ${payload.error}`);
-      }
-      const mime = payload?.mime || 'image/jpeg';
-      const b64  = payload?.data;
-      if (!b64) throw new Error('data欠落');
-
-      const src = `data:${mime};base64,${b64}`;
-      const img = new Image();
-      img.decoding = 'async';
-      img.src = src;
-      await new Promise((resolve, reject) => {
-        img.onload = () => resolve();
-        img.onerror = () => reject(new Error('img onerror'));
-        setTimeout(()=> resolve(), 0);
-      });
-      return img;
-    } finally {
-      clearTimeout(to);
-    }
-  }
-
-  async function showNext() {
-    if (inFlight) return;       // ★ 二重起動ガード
-    inFlight = true;
-    try {
-      const it = pickNextWeighted();
-      if (!it) { status('候補がありません'); return; }
-
-      // どのURLで落ちてるか一緒に表示
-      //status(`読み込み: ${it.name || ''}\n${it.url}`);
-      setAppState('loading', it.name || '');
-      status(`読み込み: ${it.name || ''}`);
-
-      const img = await preload(it.url);
-
-      nextLayer.innerHTML = '';
-      nextLayer.appendChild(img);
-      nextLayer.classList.add('show');
-      currentLayer.classList.remove('show');
-      [currentLayer, nextLayer] = [nextLayer, currentLayer];
-      // この瞬間から表示時間カウント開始
-      lastSwapAt = Date.now();
-      status('');
-      setAppState(running ? 'playing' : 'paused');
-    } catch (e) {
-      console.error('showNext error', e);
-      status(`読み込みエラー: ${String(e).slice(0,300)}`);
-      setAppState('error','Render');
-    } finally {
+        console.error('showNext error', e);
+        status(`読み込みエラー: ${String(e).slice(0, 300)}`);
+        setAppState('error', 'Render');
+      } finally {
         inFlight = false;
+      }
     }
-  }
-  
-  // ★ 追加: 次の遷移を予約（setIntervalをやめる）
-  function scheduleNext(afterMs) {
-    if (loopHandle) clearTimeout(loopHandle);
-    loopHandle = setTimeout(async () => {
+
+    // ★ 追加: 次の遷移を予約（setIntervalをやめる）
+    function scheduleNext(afterMs) {
+      if (loopHandle) clearTimeout(loopHandle);
+      loopHandle = setTimeout(async () => {
         if (!running) {
-        // 一時停止中は短い間隔で再チェック
-        scheduleNext(500);
-        return;
+          // 一時停止中は短い間隔で再チェック
+          scheduleNext(500);
+          return;
         }
 
         // まだ最低表示時間に満たない場合は延長
         const elapsed = Date.now() - lastSwapAt;
         if (elapsed < SLIDE_MS) {
-            scheduleNext(SLIDE_MS - elapsed);
-            return;
+          scheduleNext(SLIDE_MS - elapsed);
+          return;
         }
 
         await showNext();
         // 次回も「画面に出してから」SLIDE_MS後
         scheduleNext(SLIDE_MS);
-    }, Math.max(0, afterMs));
-　}
+      }, Math.max(0, afterMs));
+    }
 
     function startLoop() {
       if (timer) clearInterval(timer);
@@ -398,10 +480,11 @@ async function preload(url) {
         status(running ? '再開' : '一時停止');
         setAppState(running ? 'playing' : 'paused'); // ← 追加
         if (running) scheduleNext(SLIDE_MS);
-        setTimeout(()=>status(''),1500);
+        setTimeout(() => status(''), 1500);
       }
       lastTouchCount = ev.touches.length;
-    }, {passive:true});
+    }, { passive: true });
   </script>
 </body>
+
 </html>
