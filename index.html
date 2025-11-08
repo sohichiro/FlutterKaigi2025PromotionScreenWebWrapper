@@ -82,12 +82,24 @@
 　　.badge.ok{ background: rgba(46,204,113,.2); border-color: rgba(46,204,113,.35); }
 　　.badge.warn{ background: rgba(241,196,15,.2); border-color: rgba(241,196,15,.35); }
 　　.badge.err{ background: rgba(231,76,60,.2); border-color: rgba(231,76,60,.35); }
+    #clock-fixed{
+    　position: absolute;
+    　right: calc(env(safe-area-inset-right) + 16px);
+    　bottom: calc(env(safe-area-inset-bottom) + 16px);
+    　font-size: 26px;
+    　font-weight: 600;
+    　font-variant-numeric: tabular-nums;
+    　color: rgba(255,255,255,0.9);
+    　text-shadow: 0 0 4px rgba(0,0,0,0.7);
+    　pointer-events: none;   /* 触れられなくてOK */
+    　z-index: 20;
+    }
   </style>
 </head>
 <body>
   <div id="stage">
       <div id="topbar">
-        <div id="clock">--:--:--</div>
+        
         <div id="badges">
             <span class="badge" id="badge-state">Loading</span>
             <span class="badge" id="badge-net">Offline</span>
@@ -97,6 +109,7 @@
     　</div>
     <div id="layerA" class="layer"></div>
     <div id="layerB" class="layer"></div>
+    <div id="clock">--:--:--</div>
     <div id="hint">タップで全画面 / 2本指で解除（ガイド使用時）</div>
     <div id="hud">
       <div class="pill">新しい写真ほど表示頻度↑</div>
@@ -131,7 +144,7 @@
     const badgeNet     = document.getElementById('badge-net');
     const badgeCount   = document.getElementById('badge-count');
     const badgeUpdated = document.getElementById('badge-updated');
-    const clockEl      = document.getElementById('clock');
+    const clockEl      = document.getElementById('clock-fixed');
 
     // 状態セット
     function setAppState(kind, extraText){
@@ -164,7 +177,7 @@
     function tickClock(){
       const d = new Date();
         // 24h表示、日本ロケール
-        clockEl.textContent = d.toLocaleTimeString('ja-JP', {hour12:false});
+        clockEl.textContent = d.toLocaleTimeString('ja-JP', {hour12:false, hour: '2-digit', minute: '2-digit'});
     }
     tickClock();
     setInterval(tickClock, 1000);
