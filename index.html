@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>Signage</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <!-- iOS: スタンドアロン有効化 -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <!-- Android系の色 -->
+  <meta name="theme-color" content="#000000">
+
+  <!-- あると丁寧：ホーム画面アイコン -->
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <style>
+    html, body {
+      margin: 0; height: 100%; background:#000; overflow:hidden;
+    }
+    iframe {
+      position: fixed; inset: 0;
+      width: 100dvw; height: 100dvh;
+      border: 0; background:#000;
+    }
+    /* dvh非対応の古い環境向けフォールバック */
+    @supports not (height: 100dvh) {
+      iframe { width: 100vw; height: 100vh; }
+    }
+  </style>
+</head>
+<body>
+  <!-- GASのWebアプリURLをsrcへ。allowは保険 -->
+  <iframe
+    src="https://script.google.com/macros/s/AKfycbysQVgidwdcGL1X2QEwLUexONKlvje6A-fSa2yt7EFjniFCXkpatv9JqSv-VaaN7qbV/exec"
+    allow="fullscreen; clipboard-read; clipboard-write"
+    referrerpolicy="no-referrer"
+    sandbox="allow-scripts allow-same-origin allow-forms allow-pointer-lock allow-popups allow-popups-to-escape-sandbox">
+  </iframe>
+
+  <!-- スタンドアロン判定。falseなら案内を出す（任意） -->
+  <script>
+    if (!('standalone' in navigator) || !navigator.standalone) {
+      console.log('Tip: ホーム画面に追加すると全画面表示になります。');
+    }
+  </script>
+</body>
+</html>
