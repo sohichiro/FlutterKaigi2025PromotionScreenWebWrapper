@@ -87,16 +87,49 @@
     let running = true;
 
     async function fetchList() {
-      status('読み込み中…');
-      const res = await fetch(`${API_BASE}?fn=list`, { cache: 'no-store' });
-      const json = await res.json();
-      items = json.items || [];
+    status('読み込み中…');
+
+    // 15秒タイムアウト
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 15000);
+
+    try {
+      const res = await fetch(`${API_BASE}?fn=list`, {
+        cache: 'no-store',
+        signal: ctrl.signal
+      });
+
+      // ステータス非200でも本文をログ
+      if (!res.ok) {
+        const text = await res.text().catch(()=> '');
+        console.error('list non-OK', res.status, text);
+        status(`読み込み失敗 (${res.status})`);
+        return;
+      }
+
+      let json;
+      try {
+        json = await res.json();
+      } catch (e) {
+        const text = await res.text().catch(()=> '');
+        console.error('JSON parse error. body=', text);
+        status('JSON解析エラー');
+        return;
+      }
+
+      items = Array.isArray(json.items) ? json.items : [];
       if (!items.length) {
-        status('画像が見つかりません');
+        status('画像が見つかりません（フォルダ/権限を確認）');
         return;
       }
       status(`画像 ${items.length} 枚 / 更新 ${new Date(json.now).toLocaleString()}`);
+    } catch (e) {
+      console.error('fetch list error', e);
+      status(e.name === 'AbortError' ? 'タイムアウト' : '通信エラー');
+    } finally {
+      clearTimeout(to);
     }
+  }
 
     function status(msg) { statusEl.textContent = msg; }
 
