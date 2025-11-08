@@ -152,68 +152,66 @@
       return pool[pool.length - 1];
     }
 
-    async function preload(url) {
-        // 15秒タイムアウト
-        const ctrl = new AbortController();
-        const to = setTimeout(() => ctrl.abort(), 15000);
-
-          try {
-    const res = await fetch(url, { cache: 'no-store', signal: ctrl.signal });
-    if (!res.ok) {
-      const text = await res.text().catch(()=> '');
-      throw new Error(`HTTP ${res.status} ${text?.slice(0,120)}`);
-    }
-    let payload;
+async function preload(url) {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 15000);
     try {
-      payload = await res.json();
-    } catch (e) {
-      const text = await res.text().catch(()=> '');
-      throw new Error(`JSON解析失敗 ${text?.slice(0,120)}`);
-    }
-    if (payload?.error) {
-      throw new Error(payload.error);
-    }
-    const mime = payload?.mime || 'image/jpeg';
-    const b64  = payload?.data;
-    if (!b64) throw new Error('data欠落');
-
-    // data URL を作成
-    const src = `data:${mime};base64,${b64}`;
-    const img = new Image();
-    img.decoding = 'async';
-    img.src = src;
-
-    await new Promise((resolve, reject) => {
-      img.onload = () => resolve();
-      img.onerror = () => reject(new Error('img onerror'));
-      setTimeout(()=> resolve(), 0); // Safari保険
-    });
-    return img;
-  } finally {
-    clearTimeout(to);
-  }
-}
-
-    async function showNext() {
-      try {
-        const it = pickNextWeighted();
-        if (!it) return;
-        const img = await preload(it.url);
-
-        // 次レイヤへ挿入
-        nextLayer.innerHTML = '';
-        nextLayer.appendChild(img);
-        // フェード
-        nextLayer.classList.add('show');
-        currentLayer.classList.remove('show');
-
-        // レイヤをスワップ
-        [currentLayer, nextLayer] = [nextLayer, currentLayer];
-      } catch (e) {
-        console.error(e);
-        status('読み込みエラー');
+      const res = await fetch(url, { cache: 'no-store', signal: ctrl.signal });
+      if (!res.ok) {
+        const text = await res.text().catch(()=> '');
+        throw new Error(`HTTP ${res.status} ${text?.slice(0,200)}`);
       }
+      let payload;
+      try {
+        payload = await res.json();
+      } catch (e) {
+        const text = await res.text().catch(()=> '');
+        throw new Error(`JSON解析失敗 ${text?.slice(0,200)}`);
+      }
+      if (payload?.error) {
+        // エラー本文をそのまま可視化
+        throw new Error(`img64 error: ${payload.error}`);
+      }
+      const mime = payload?.mime || 'image/jpeg';
+      const b64  = payload?.data;
+      if (!b64) throw new Error('data欠落');
+
+      const src = `data:${mime};base64,${b64}`;
+      const img = new Image();
+      img.decoding = 'async';
+      img.src = src;
+      await new Promise((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error('img onerror'));
+        setTimeout(()=> resolve(), 0);
+      });
+      return img;
+    } finally {
+      clearTimeout(to);
     }
+  }
+
+  async function showNext() {
+    try {
+      const it = pickNextWeighted();
+      if (!it) { status('候補がありません'); return; }
+
+      // どのURLで落ちてるか一緒に表示
+      status(`読み込み: ${it.name || ''}\n${it.url}`);
+
+      const img = await preload(it.url);
+
+      nextLayer.innerHTML = '';
+      nextLayer.appendChild(img);
+      nextLayer.classList.add('show');
+      currentLayer.classList.remove('show');
+      [currentLayer, nextLayer] = [nextLayer, currentLayer];
+      status('');
+    } catch (e) {
+      console.error('showNext error', e);
+      status(`読み込みエラー: ${String(e).slice(0,300)}`);
+    }
+  }
 
     function startLoop() {
       if (timer) clearInterval(timer);
