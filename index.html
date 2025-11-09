@@ -232,6 +232,35 @@
     let loopHandle = null;
     let inFlight = false;   // 遷移の同時実行防止
     let lastSwapAt = 0;     // 最後に画像が画面に出た時刻（ms）
+    
+    // === UI 表示/非表示トグル ===
+    let uiVisible = false; // 初期状態: 非表示（必要なら true に）
+    function setUiVisible(v){
+        uiVisible = v;
+        document.body.classList.toggle('ui-visible', v);
+    }
+    // 起動時に反映
+    setUiVisible(uiVisible);
+
+    // シングルタップとダブルタップを判定
+    const stage = document.getElementById('stage');
+    let clickTimer = null;
+
+    stage.addEventListener('click', (e) => {
+        // ダブルタップが来る可能性があるので少し待つ
+        if (clickTimer) return;
+        clickTimer = setTimeout(() => {
+            setUiVisible(!uiVisible);     // ← ここでヒント＆HUDの表示/非表示を切替
+            clickTimer = null;
+        }, 250);
+    });
+
+    // ダブルタップでフルスクリーン
+    stage.addEventListener('dblclick', (e) => {
+        if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
+        e.preventDefault();
+        toggleFullscreen();             // 既存の関数をそのまま利用
+    });
 
     // --- Topbar elements
     const badgeState = document.getElementById('badge-state');
@@ -270,7 +299,11 @@
     // 時計
     function tickClock() {
       const d = new Date();
-      clockEl.textContent = d.toLocaleTimeString('ja-JP', { hour12: false });
+      clockEl.textContent = d.toLocaleTimeString('ja-JP', {
+          hour12: false,
+          hour: '2-digit',
+          minute: '2-digit'
+        });
     }
     tickClock();
     setInterval(tickClock, 1000);
