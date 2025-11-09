@@ -65,15 +65,11 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      opacity: .0;
-      transition: opacity .3s;
+      opacity: 0;
+      transition: opacity .3s ease;
       font-size: 12px;
       color: rgba(255, 255, 255, .8);
       pointer-events: none;
-    }
-
-    #stage:hover #hud {
-      opacity: .9;
     }
 
     .pill {
@@ -104,9 +100,11 @@
       background: rgba(0, 0, 0, .35);
       padding: 6px 10px;
       border-radius: 8px;
+      opacity: 0;
+      transition: opacity .3s ease;
     }
 
-    #statusbar{
+    #statusbar {
       position: absolute;
       left: 12px;
       bottom: calc(env(safe-area-inset-bottom) + 12px);
@@ -117,13 +115,17 @@
       justify-content: flex-start;
       max-width: min(80vw, 900px);
       padding: 6px 10px;
-      background: rgba(0,0,0,.35);
+      background: rgba(0, 0, 0, .35);
       backdrop-filter: blur(4px);
-      border: 1px solid rgba(255,255,255,.15);
+      border: 1px solid rgba(255, 255, 255, .15);
       border-radius: 10px;
-      font-size: 12px; color: #fff;
+      font-size: 12px;
+      color: #fff;
       z-index: 15;
-      pointer-events: none; /* バッジは触れなくてOK */
+      pointer-events: none;
+      /* バッジは触れなくてOK */
+      opacity: 0;
+      transition: opacity .3s ease;
     }
 
     #clock {
@@ -175,18 +177,33 @@
       /* 触れられなくてOK */
       z-index: 20;
     }
-    #hud{
+
+    #hud {
       position: absolute;
       top: calc(env(safe-area-inset-top) + 12px);
       right: calc(env(safe-area-inset-right) + 12px);
-      left: auto; bottom: auto; /* ← 下・左の固定は解除 */
-      display: flex; justify-content: flex-end; align-items: center;
-      opacity: .0; transition: opacity .3s;
-      font-size: 12px; color: rgba(255,255,255,.8);
+      left: auto;
+      bottom: auto;
+      /* ← 下・左の固定は解除 */
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      opacity: 0;
+      transition: opacity .3s ease;
+      font-size: 12px;
+      color: rgba(255, 255, 255, .8);
       pointer-events: none;
       z-index: 14;
     }
-    #stage:hover #hud { opacity: .9; }
+
+    body.status-visible #statusbar,
+    body.status-visible #hint {
+      opacity: 1;
+    }
+
+    body.status-visible #hud {
+      opacity: .95;
+    }
   </style>
 </head>
 
@@ -204,7 +221,7 @@
     <div id="layerA" class="layer"></div>
     <div id="layerB" class="layer"></div>
     <div id="clock-fixed">--:--:--</div>
-    <div id="hint">タップで全画面 / 2本指で解除（ガイド使用時）</div>
+    <div id="hint">トリプルタップでステータス表示 / 表示中はダブルタップで全画面 / 2本指で一時停止</div>
     <div id="hud">
       <div class="pill">新しい写真ほど表示頻度↑</div>
       <div class="pill" id="status">—</div>
@@ -232,34 +249,58 @@
     let loopHandle = null;
     let inFlight = false;   // 遷移の同時実行防止
     let lastSwapAt = 0;     // 最後に画像が画面に出た時刻（ms）
-    
+
     // === UI 表示/非表示トグル ===
-    let uiVisible = false; // 初期状態: 非表示（必要なら true に）
-    function setUiVisible(v){
-        uiVisible = v;
-        document.body.classList.toggle('ui-visible', v);
+    let statusVisible = false; // 初期状態: 非表示
+    function setStatusVisible(v) {
+      statusVisible = v;
+      document.body.classList.toggle('status-visible', v);
     }
     // 起動時に反映
-    setUiVisible(uiVisible);
+    setStatusVisible(statusVisible);
 
-    // シングルタップとダブルタップを判定
+    // トリプル/ダブルタップを判定
     const stage = document.getElementById('stage');
-    let clickTimer = null;
+    const TAP_TIMEOUT_MS = 400;
+    let tapCount = 0;
+    let tapTimerId = null;
 
-    stage.addEventListener('click', (e) => {
-        // ダブルタップが来る可能性があるので少し待つ
-        if (clickTimer) return;
-        clickTimer = setTimeout(() => {
-            setUiVisible(!uiVisible);     // ← ここでヒント＆HUDの表示/非表示を切替
-            clickTimer = null;
-        }, 250);
-    });
+    function resetTapSequence() {
+      tapCount = 0;
+      if (tapTimerId) {
+        clearTimeout(tapTimerId);
+        tapTimerId = null;
+      }
+    }
 
-    // ダブルタップでフルスクリーン
-    stage.addEventListener('dblclick', (e) => {
-        if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
-        e.preventDefault();
-        toggleFullscreen();             // 既存の関数をそのまま利用
+    function handleTapGesture() {
+      tapCount += 1;
+
+      if (tapCount === 3) {
+        setStatusVisible(!statusVisible);
+        resetTapSequence();
+        return;
+      }
+
+      if (tapTimerId) clearTimeout(tapTimerId);
+      tapTimerId = setTimeout(() => {
+        if (tapCount === 2 && statusVisible) {
+          toggleFullscreen();
+        }
+        resetTapSequence();
+      }, TAP_TIMEOUT_MS);
+    }
+
+    let multiTouchGesture = false;
+
+    stage.addEventListener('pointerup', (ev) => {
+      if (!ev.isPrimary) return;
+      if (ev.pointerType === 'mouse' && ev.button !== 0) return;
+      if (ev.pointerType === 'touch') {
+        if (multiTouchGesture) return;
+        ev.preventDefault();
+      }
+      handleTapGesture();
     });
 
     // --- Topbar elements
@@ -300,10 +341,10 @@
     function tickClock() {
       const d = new Date();
       clockEl.textContent = d.toLocaleTimeString('ja-JP', {
-          hour12: false,
-          hour: '2-digit',
-          minute: '2-digit'
-        });
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit'
+      });
     }
     tickClock();
     setInterval(tickClock, 1000);
@@ -521,16 +562,27 @@
     // タップでフルスクリーン
     document.getElementById('stage').addEventListener('click', () => toggleFullscreen());
     // 2本指タップで一時停止/再開（ガイド中の簡易操作）
-    let lastTouchCount = 0;
     window.addEventListener('touchstart', (ev) => {
       if (ev.touches.length === 2) {
         running = !running;
         status(running ? '再開' : '一時停止');
-        setAppState(running ? 'playing' : 'paused'); // ← 追加
+        setAppState(running ? 'playing' : 'paused');
         if (running) scheduleNext(SLIDE_MS);
         setTimeout(() => status(''), 1500);
       }
-      lastTouchCount = ev.touches.length;
+      if (ev.touches.length > 1) {
+        multiTouchGesture = true;
+      }
+    }, { passive: true });
+
+    window.addEventListener('touchend', (ev) => {
+      if (ev.touches.length === 0) {
+        multiTouchGesture = false;
+      }
+    }, { passive: true });
+
+    window.addEventListener('touchcancel', () => {
+      multiTouchGesture = false;
     }, { passive: true });
   </script>
 </body>
